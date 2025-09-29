@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Biblioteca de Gráficos y Datos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --fg:#222; --bg:#fff; --muted:#666; --accent:#0a7; --border:#ddd; --error:#b00; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+    header{padding:24px 16px;border-bottom:1px solid var(--border);max-width:1100px;margin:0 auto}
+    header h1{margin:0 0 8px 0;font-size:24px}
+    header p{margin:0;color:var(--muted)}
+    main{max-width:1100px;margin:0 auto;padding:16px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+    .toolbar input[type="text"]{flex:1 1 260px;padding:8px 10px;border:1px solid var(--border);border-radius:6px}
+    .toolbar .hint{font-size:12px;color:var(--muted)}
+    .toolbar select, .toolbar button, .toolbar label{padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:#fafafa}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+    th{background:#fafafa;text-align:left;position:sticky;top:0;z-index:1}
+    .pagination{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .pagination button{padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer}
+    .pagination button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .stats{font-size:12px;color:var(--muted);margin-left:auto}
+    .error{color:var(--error);font-size:12px}
+    .sr{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+    .nowrap{white-space:nowrap}
+    code.k{background:#f4f4f4;border:1px solid #e6e6e6;border-radius:4px;padding:0 4px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Biblioteca de datos</h1>
+    <p>Explorador de registros a partir de archivos JSON. Buscador con soporte de expresiones regulares y tabla paginada.</p>
+  </header>
+  <main>
+    <section class="toolbar" aria-label="Controles de búsqueda y paginación">
+      <input id="q" type="text" placeholder="Buscar (regex). Ej: ^cat.*202[0-5]$" aria-label="Buscar (regex)">
+      <label><input id="case" type="checkbox"> Sensible a mayúsculas</label>
+      <select id="pageSize" aria-label="Filas por página">
+        <option value="10" selected>10 por página</option>
+        <option value="25">25 por página</option>
+        <option value="50">50 por página</option>
+        <option value="100">100 por página</option>
+      </select>
+      <span id="err" class="error" role="status" aria-live="polite"></span>
+      <span class="stats" id="stats"></span>
+    </section>
+
+    <div style="overflow:auto; max-height:70vh; border:1px solid var(--border); border-radius:8px;">
+      <table id="table" aria-label="Resultados">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <nav class="pagination" id="pager" aria-label="Paginación"></nav>
+    <p class="hint">
+      Sugerencia: usa patrones regex. Teclas rápidas: <code class="k">/</code> enfoca buscador, <code class="k">Enter</code> aplica.
+    </p>
+  </main>
+
+  <script>
+  ;(function(){
+    const el = id => document.getElementById(id);
+    const $q = el('q'), $case = el('case'), $pageSize = el('pageSize'), $err = el('err'), $stats = el('stats');
+    const $thead = el('thead'), $tbody = el('tbody'), $pager = el('pager');
+    let RAW = [];
+    let COLUMNS = [];
+    let FILTERED = [];
+    let state = { page: 1, pageSize: 10, pattern: '', flags: 'i' };
+
+    const SAMPLE_DATA = [
+      { id: 1, nombre: 'Informe A', categoria: 'salud', fecha: '2023-09-01' },
+      { id: 2, nombre: 'Informe B', categoria: 'educación', fecha: '2024-02-10' },
+      { id: 3, nombre: 'Dataset C', categoria: 'economía', fecha: '2022-12-20' },
+      { id: 4, nombre: 'Reporte D', categoria: 'salud', fecha: '2025-06-15' }
+    ];
+
+    function unique(arr){ return Array.from(new Set(arr)); }
+    function inferColumns(rows){
+      const keys = rows.flatMap(r => Object.keys(r ?? {}));
+      return unique(keys);
+    }
+    function textOf(v){
+      if (v == null) return '';
+      if (typeof v === 'object') return JSON.stringify(v);
+      return String(v);
+    }
+    function buildRegex(pattern, flags){
+      try{
+        return { re: new RegExp(pattern, flags), error: null };
+      }catch(e){
+        return { re: null, error: e.message };
+      }
+    }
+
+    function renderHeader(){
+      $thead.innerHTML = '';
+      const tr = document.createElement('tr');
+      for (const k of COLUMNS){
+        const th = document.createElement('th');
+        th.textContent = k;
+        tr.appendChild(th);
+      }
+      $thead.appendChild(tr);
+    }
+
+    function renderBody(rows){
+      $tbody.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (const row of rows){
+        const tr = document.createElement('tr');
+        for (const k of COLUMNS){
+          const td = document.createElement('td');
+          td.textContent = textOf(row[k]);
+          tr.appendChild(td);
+        }
+        frag.appendChild(tr);
+      }
+      $tbody.appendChild(frag);
+    }
+
+    function renderPager(total, page, pageSize){
+      $pager.innerHTML = '';
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const btn = (label, target, disabled=false, active=false) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if (active) b.classList.add('active');
+        if (disabled){ b.disabled = true; }
+        else { b.addEventListener('click', () => { state.page = target; update(); }); }
+        return b;
+      };
+      $pager.appendChild(btn('«', 1, page===1));
+      $pager.appendChild(btn('‹', Math.max(1, page-1), page===1));
+
+      const windowSize = 5;
+      const start = Math.max(1, page - Math.floor(windowSize/2));
+      const end = Math.min(totalPages, start + windowSize - 1);
+      for (let p = Math.max(1, end - windowSize + 1); p <= end; p++){
+        $pager.appendChild(btn(String(p), p, false, p===page));
+      }
+
+      $pager.appendChild(btn('›', Math.min(totalPages, page+1), page===totalPages));
+      $pager.appendChild(btn('»', totalPages, page===totalPages));
+
+      $stats.textContent = total === 0
+        ? '0 resultados'
+        : `Mostrando ${Math.min((page-1)*pageSize+1, total)}–${Math.min(page*pageSize, total)} de ${total}`;
+    }
+
+    function applyFilter(){
+      const pattern = state.pattern.trim();
+      if (!pattern){
+        $err.textContent = '';
+        return RAW.slice();
+      }
+      const { re, error } = buildRegex(pattern, state.flags);
+      if (error){
+        $err.textContent = 'Regex inválida: ' + error;
+        return RAW.slice(0, 0);
+      }
+      $err.textContent = '';
+      return RAW.filter(row => {
+        for (const k of COLUMNS){
+          if (re.test(textOf(row[k]))) return true;
+        }
+        return false;
+      });
+    }
+
+    function update(){
+      state.pageSize = parseInt($pageSize.value, 10);
+      FILTERED = applyFilter();
+      const total = FILTERED.length;
+      const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+
+      const start = (state.page - 1) * state.pageSize;
+      const pageRows = FILTERED.slice(start, start + state.pageSize);
+
+      renderHeader();
+      renderBody(pageRows);
+      renderPager(total, state.page, state.pageSize);
+    }
+
+    async function loadData(){
+      // Carga consolidada desde manifest.json (raíz). Si falla, usa SAMPLE_DATA
+      try{
+        const res = await fetch('manifest.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('manifest no disponible');
+        const manifest = await res.json(); // { items: [...] }
+        const items = Array.isArray(manifest.items) ? manifest.items : [];
+        RAW = items.length ? items : SAMPLE_DATA;
+      }catch(_){
+        RAW = SAMPLE_DATA;
+      }
+      COLUMNS = inferColumns(RAW);
+      update();
+    }
+
+    // Eventos
+    $q.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { state.page = 1; state.pattern = $q.value; update(); }
+    });
+    $q.addEventListener('input', () => { state.pattern = $q.value; });
+    $case.addEventListener('change', () => {
+      state.flags = $case.checked ? '' : 'i';
+      state.page = 1; update();
+    });
+    $pageSize.addEventListener('change', () => { state.page = 1; update(); });
+
+    // Tecla rápida "/" para enfocar el buscador
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== $q){
+        e.preventDefault(); $q.focus();
+      }
+    });
+
+    loadData();
+  })();
+  </script>
+</body>
+</html>
