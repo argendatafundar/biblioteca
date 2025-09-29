@@ -7,12 +7,12 @@
   <style>
     :root { --fg:#222; --bg:#fff; --muted:#666; --accent:#0a7; --border:#ddd; --error:#b00; }
     html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
-    header{padding:24px 16px;border-bottom:1px solid var(--border);max-width:1100px;margin:0 auto}
+    header{padding:24px 16px;border-bottom:1px solid var(--border);max-width:1400px;margin:0 auto}
     header h1{margin:0 0 8px 0;font-size:24px}
     header p{margin:0;color:var(--muted)}
     header .brand{display:flex;align-items:center;gap:12px}
     header .brand .logo{height:40px;width:auto;display:block}
-    main{max-width:1100px;margin:0 auto;padding:16px}
+    main{max-width:1400px;margin:0 auto;padding:16px}
     .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
     .toolbar input[type="text"]{flex:1 1 260px;padding:8px 10px;border:1px solid var(--border);border-radius:6px}
     .toolbar .hint{font-size:12px;color:var(--muted)}
@@ -62,7 +62,13 @@
     <div style="overflow:auto; max-height:70vh; border:1px solid var(--border); border-radius:8px;">
       <table id="table" aria-label="Resultados">
         <colgroup>
-          <col style="width:12%"><col style="width:18%"><col style="width:20%"><col style="width:16%"><col style="width:10%"><col style="width:12%"><col style="width:12%">
+          <col style="width:10%">
+          <col style="width:14%">
+          <col style="width:14%">
+          <col style="width:14%">
+          <col style="width:18%">
+          <col style="width:14%">
+          <col style="width:16%">
         </colgroup>
         <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
