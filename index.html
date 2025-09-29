@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Biblioteca de Gráficos y Datos</title>
+  <title>Biblioteca de Datasets</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root { --fg:#222; --bg:#fff; --muted:#666; --accent:#0a7; --border:#ddd; --error:#b00; }
@@ -11,7 +11,7 @@
     header h1{margin:0 0 8px 0;font-size:24px}
     header p{margin:0;color:var(--muted)}
     header .brand{display:flex;align-items:center;gap:12px}
-    header .brand .logo{height:40px;width:auto;display:block}
+    header .brand .logo{height:56px;width:auto;display:block}
     main{max-width:1400px;margin:0 auto;padding:16px}
     .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
     .toolbar input[type="text"]{flex:1 1 260px;padding:8px 10px;border:1px solid var(--border);border-radius:6px}
@@ -38,9 +38,13 @@
   </header>
   <main>
     <main>
-      <h1>Biblioteca de datos</h1>
-      <p>Explorador de datasets de argendata.fund.ar.</p>
+      <h1>Biblioteca de Datasets de Argendata</h1>
+      <h2>Explorador de datasets de <a href="https://argendata.fund.ar/" target="_blank" rel="noopener">argendata.fund.ar</a>.</h2>
       <p>Buscador con soporte de expresiones regulares y tabla paginada.</p>
+      <p>Filtrá por tópico, buscá por regex y paginá los resultados.</p>
+      <p>Los datasets se encuentran en el repositorio de <a href="https://github.com/argendatafundar/data" target="_blank">argendatafundar/data</a>.</p>
+      <p>Haciendo click podés ver el dataset y el gráfico correspondiente</p>
+
       <section class="toolbar" aria-label="Controles de búsqueda y paginación">
         <select id="topicFilter" aria-label="Filtrar por tópico">
           <option value="">Todos los tópicos</option>
