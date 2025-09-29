@@ -51,7 +51,6 @@
         </select>
         <input id="q" type="text" placeholder="Buscar" aria-label="Buscar (regex)">
         <button id="searchBtn" type="button">Buscar</button>
-        <label><input id="case" type="checkbox"> Sensible a mayúsculas</label>
         <select id="pageSize" aria-label="Filas por página">
           <option value="10">10 por página</option>
           <option value="20" selected>20 por página</option>
@@ -88,12 +87,12 @@
   <script>
   ;(function(){
     const el = id => document.getElementById(id);
-    const $q = el('q'), $case = el('case'), $pageSize = el('pageSize'), $err = el('err'), $stats = el('stats'), $searchBtn = el('searchBtn');
+    const $q = el('q'), $pageSize = el('pageSize'), $err = el('err'), $stats = el('stats'), $searchBtn = el('searchBtn');
     const $topic = el('topicFilter');
     const $thead = el('thead'), $tbody = el('tbody'), $pager = el('pager');
     let RAW = [];
     let FILTERED = [];
-    let state = { page: 1, pageSize: 20, pattern: '', flags: 'i', topic: '' };
+    let state = { page: 1, pageSize: 20, pattern: '', topic: '' };
 
     function textOf(v){
       if (v == null) return '';
@@ -101,9 +100,9 @@
       return String(v);
     }
 
-    function buildRegex(pattern, flags){
+    function buildRegex(pattern){
       try{
-        return { re: new RegExp(pattern, flags), error: null };
+        return { re: new RegExp(pattern, 'i'), error: null };
       }catch(e){
         return { re: null, error: e.message };
       }
@@ -217,7 +216,7 @@
         $err.textContent = '';
         return base;
       }
-      const { re, error } = buildRegex(pattern, state.flags);
+      const { re, error } = buildRegex(pattern);
       if (error){
         $err.textContent = 'Regex inválida: ' + error;
         return base.slice(0, 0);
@@ -268,10 +267,6 @@
       if (e.key === 'Enter') { state.page = 1; state.pattern = $q.value; update(); }
     });
     $q.addEventListener('input', () => { state.pattern = $q.value; });
-    $case.addEventListener('change', () => {
-      state.flags = $case.checked ? '' : 'i';
-      state.page = 1; update();
-    });
     $pageSize.addEventListener('change', () => { state.page = 1; update(); });
     $topic.addEventListener('change', () => { state.page = 1; state.topic = $topic.value; update(); });
     $searchBtn.addEventListener('click', () => { state.page = 1; state.pattern = $q.value; update(); });
