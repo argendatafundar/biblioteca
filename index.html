@@ -10,6 +10,8 @@
     header{padding:24px 16px;border-bottom:1px solid var(--border);max-width:1100px;margin:0 auto}
     header h1{margin:0 0 8px 0;font-size:24px}
     header p{margin:0;color:var(--muted)}
+    header .brand{display:flex;align-items:center;gap:12px}
+    header .brand .logo{height:40px;width:auto;display:block}
     main{max-width:1100px;margin:0 auto;padding:16px}
     .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
     .toolbar input[type="text"]{flex:1 1 260px;padding:8px 10px;border:1px solid var(--border);border-radius:6px}
@@ -30,28 +32,37 @@
 </head>
 <body>
   <header>
-    <h1>Biblioteca de datos</h1>
-    <p>Explorador de registros a partir de archivos JSON. Buscador con soporte de expresiones regulares y tabla paginada.</p>
+    <div class="brand">
+      <img class="logo" src="assets/icon.png" alt="ArgendataFundar" href="#">
+    </div>
   </header>
   <main>
-    <section class="toolbar" aria-label="Controles de búsqueda y paginación">
-      <input id="q" type="text" placeholder="Buscar (regex). Ej: ^cat.*202[0-5]$" aria-label="Buscar (regex)">
-      <label><input id="case" type="checkbox"> Sensible a mayúsculas</label>
-      <select id="pageSize" aria-label="Filas por página">
-        <option value="10">10 por página</option>
-        <option value="20" selected>20 por página</option>
-        <option value="25">25 por página</option>
-        <option value="50">50 por página</option>
-        <option value="100">100 por página</option>
-      </select>
-      <span id="err" class="error" role="status" aria-live="polite"></span>
-      <span class="stats" id="stats"></span>
-    </section>
+    <main>
+      <h1>Biblioteca de datos</h1>
+      <p>Explorador de datasets de argendata.fund.ar.</p>
+      <p>Buscador con soporte de expresiones regulares y tabla paginada.</p>
+      <section class="toolbar" aria-label="Controles de búsqueda y paginación">
+        <select id="topicFilter" aria-label="Filtrar por tópico">
+          <option value="">Todos los tópicos</option>
+        </select>
+        <input id="q" type="text" placeholder="Buscar" aria-label="Buscar (regex)">
+        <button id="searchBtn" type="button">Buscar</button>
+        <label><input id="case" type="checkbox"> Sensible a mayúsculas</label>
+        <select id="pageSize" aria-label="Filas por página">
+          <option value="10">10 por página</option>
+          <option value="20" selected>20 por página</option>
+          <option value="25">25 por página</option>
+          <option value="50">50 por página</option>
+          <option value="100">100 por página</option>
+        </select>
+        <span id="err" class="error" role="status" aria-live="polite"></span>
+        <span class="stats" id="stats"></span>
+      </section>
 
     <div style="overflow:auto; max-height:70vh; border:1px solid var(--border); border-radius:8px;">
       <table id="table" aria-label="Resultados">
         <colgroup>
-          <col style="width:24%"><col style="width:24%"><col style="width:18%"><col style="width:18%"><col style="width:16%">
+          <col style="width:12%"><col style="width:18%"><col style="width:20%"><col style="width:16%"><col style="width:10%"><col style="width:12%"><col style="width:12%">
         </colgroup>
         <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
@@ -67,11 +78,12 @@
   <script>
   ;(function(){
     const el = id => document.getElementById(id);
-    const $q = el('q'), $case = el('case'), $pageSize = el('pageSize'), $err = el('err'), $stats = el('stats');
+    const $q = el('q'), $case = el('case'), $pageSize = el('pageSize'), $err = el('err'), $stats = el('stats'), $searchBtn = el('searchBtn');
+    const $topic = el('topicFilter');
     const $thead = el('thead'), $tbody = el('tbody'), $pager = el('pager');
     let RAW = [];
     let FILTERED = [];
-    let state = { page: 1, pageSize: 20, pattern: '', flags: 'i' };
+    let state = { page: 1, pageSize: 20, pattern: '', flags: 'i', topic: '' };
 
     function textOf(v){
       if (v == null) return '';
@@ -97,7 +109,9 @@
       return '';
     }
 
+    
     const COLUMNS_FIXED = [
+      { header: 'Tópico', getText: r => textOf(r.nombre_topico) },
       { header: 'Título gráfico', getText: r => textOf(r.titulo) },
       { header: 'Sub-título', getText: r => textOf(r.bajada) },
       { header: 'URL gráfico', getText: r => textOf(getWebpage(r.sources)), render: (r) => {
@@ -105,6 +119,15 @@
           if (!url) return document.createTextNode('');
           const a = document.createElement('a');
           a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener';
+          return a;
+        }
+      },
+      { header: 'Dataset', getText: r => textOf(r.nombre_archivo), render: (r) => {
+          const href = r.link_dataset || '';
+          const name = r.nombre_archivo || '';
+          if (!href || !name) return document.createTextNode(name || '');
+          const a = document.createElement('a');
+          a.href = href; a.textContent = name; a.target = '_blank'; a.rel = 'noopener';
           return a;
         }
       },
@@ -173,18 +196,24 @@
     }
 
     function applyFilter(){
+      // Filtrado por tópico
+      const base = state.topic
+        ? RAW.filter(r => (r.nombre_topico || r.topico || '') === state.topic)
+        : RAW.slice();
+
+      // Filtrado por regex
       const pattern = state.pattern.trim();
       if (!pattern){
         $err.textContent = '';
-        return RAW.slice();
+        return base;
       }
       const { re, error } = buildRegex(pattern, state.flags);
       if (error){
         $err.textContent = 'Regex inválida: ' + error;
-        return RAW.slice(0, 0);
+        return base.slice(0, 0);
       }
       $err.textContent = '';
-      return RAW.filter(row => {
+      return base.filter(row => {
         for (const c of COLUMNS_FIXED){
           if (re.test(c.getText(row))) return true;
         }
@@ -217,12 +246,15 @@
       }catch(_){
         RAW = [];
       }
+      // Poblar opciones de tópico
+      const topics = Array.from(new Set(RAW.map(r => r.nombre_topico || r.topico).filter(Boolean))).sort();
+      $topic.innerHTML = '<option value="">Todos los tópicos</option>' + topics.map(t => `<option value="${t}">${t}</option>`).join('');
       $pageSize.value = String(state.pageSize);
       update();
     }
 
-    // Eventos
-    $q.addEventListener('keydown', (e) => {
+       // Eventos
+       $q.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { state.page = 1; state.pattern = $q.value; update(); }
     });
     $q.addEventListener('input', () => { state.pattern = $q.value; });
@@ -231,13 +263,8 @@
       state.page = 1; update();
     });
     $pageSize.addEventListener('change', () => { state.page = 1; update(); });
-
-    // Tecla rápida "/" para enfocar el buscador
-    window.addEventListener('keydown', (e) => {
-      if (e.key === '/' && document.activeElement !== $q){
-        e.preventDefault(); $q.focus();
-      }
-    });
+    $topic.addEventListener('change', () => { state.page = 1; state.topic = $topic.value; update(); });
+    $searchBtn.addEventListener('click', () => { state.page = 1; state.pattern = $q.value; update(); });
 
     loadData();
   })();
