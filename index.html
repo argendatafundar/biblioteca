@@ -23,7 +23,7 @@
     .pagination{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:12px}
     .pagination button{padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer}
     .pagination button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .stats{font-size:12px;color:var(--muted);margin-left:auto}
+    .stats{font-size:12px;color:var(--muted)}
     .error{color:var(--error);font-size:12px}
     .sr{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
     .nowrap{white-space:nowrap}
@@ -46,18 +46,14 @@
       <p>Haciendo click podés ver el dataset y el gráfico correspondiente</p>
 
       <section class="toolbar" aria-label="Controles de búsqueda y paginación">
+        <select id="categoryFilter" aria-label="Filtrar por categoría">
+          <option value="">Todas las categorías</option>
+        </select>
         <select id="topicFilter" aria-label="Filtrar por tópico">
           <option value="">Todos los tópicos</option>
         </select>
         <input id="q" type="text" placeholder="Buscar" aria-label="Buscar (regex)">
         <button id="searchBtn" type="button">Buscar</button>
-        <select id="pageSize" aria-label="Filas por página">
-          <option value="10">10 por página</option>
-          <option value="20" selected>20 por página</option>
-          <option value="25">25 por página</option>
-          <option value="50">50 por página</option>
-          <option value="100">100 por página</option>
-        </select>
         <span id="err" class="error" role="status" aria-live="polite"></span>
         <span class="stats" id="stats"></span>
       </section>
@@ -66,12 +62,13 @@
       <table id="table" aria-label="Resultados">
         <colgroup>
           <col style="width:10%">
-          <col style="width:14%">
-          <col style="width:14%">
-          <col style="width:14%">
-          <col style="width:18%">
-          <col style="width:14%">
+          <col style="width:9%">
+          <col style="width:12%">
+          <col style="width:12%">
+          <col style="width:12%">
           <col style="width:16%">
+          <col style="width:12%">
+          <col style="width:14%">
         </colgroup>
         <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
@@ -79,6 +76,16 @@
     </div>
 
     <nav class="pagination" id="pager" aria-label="Paginación"></nav>
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+      <label for="pageSize" style="font-size:14px;">Filas por página:</label>
+      <select id="pageSize" aria-label="Filas por página" style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:#fafafa">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
     <p class="hint">
       Sugerencia: usa patrones regex. Teclas rápidas: <code class="k">/</code> enfoca buscador, <code class="k">Enter</code> aplica.
     </p>
@@ -88,11 +95,11 @@
   ;(function(){
     const el = id => document.getElementById(id);
     const $q = el('q'), $pageSize = el('pageSize'), $err = el('err'), $stats = el('stats'), $searchBtn = el('searchBtn');
-    const $topic = el('topicFilter');
+    const $topic = el('topicFilter'), $category = el('categoryFilter');
     const $thead = el('thead'), $tbody = el('tbody'), $pager = el('pager');
     let RAW = [];
     let FILTERED = [];
-    let state = { page: 1, pageSize: 20, pattern: '', topic: '' };
+    let state = { page: 1, pageSize: 20, pattern: '', topic: '', category: '' };
 
     function textOf(v){
       if (v == null) return '';
@@ -120,6 +127,7 @@
 
     
     const COLUMNS_FIXED = [
+      { header: 'Categoría', getText: r => textOf(r.categoria) },
       { header: 'Tópico', getText: r => textOf(r.nombre_topico) },
       { header: 'Título gráfico', getText: r => textOf(r.titulo) },
       { header: 'Sub-título', getText: r => textOf(r.bajada) },
@@ -205,10 +213,14 @@
     }
 
     function applyFilter(){
-      // Filtrado por tópico
-      const base = state.topic
-        ? RAW.filter(r => (r.nombre_topico || r.topico || '') === state.topic)
-        : RAW.slice();
+      // Filtrado por categoría y tópico
+      let base = RAW.slice();
+      if (state.category){
+        base = base.filter(r => (r.categoria || '') === state.category);
+      }
+      if (state.topic){
+        base = base.filter(r => (r.nombre_topico || r.topico || '') === state.topic);
+      }
 
       // Filtrado por regex
       const pattern = state.pattern.trim();
@@ -245,6 +257,24 @@
       renderPager(total, state.page, state.pageSize);
     }
 
+    function updateTopicFilter(){
+      let filteredData = RAW;
+      if (state.category){
+        filteredData = RAW.filter(r => (r.categoria || '') === state.category);
+      }
+      const topics = Array.from(new Set(filteredData.map(r => r.nombre_topico || r.topico).filter(Boolean))).sort();
+      const currentTopic = state.topic;
+      $topic.innerHTML = '<option value="">Todos los tópicos</option>' + topics.map(t => `<option value="${t}">${t}</option>`).join('');
+      
+      // Restaurar el tópico seleccionado si todavía existe en las opciones filtradas
+      if (currentTopic && topics.includes(currentTopic)){
+        $topic.value = currentTopic;
+      } else {
+        state.topic = '';
+        $topic.value = '';
+      }
+    }
+
     async function loadData(){
       try{
         const res = await fetch('manifest.json', { cache: 'no-store' });
@@ -255,9 +285,13 @@
       }catch(_){
         RAW = [];
       }
-      // Poblar opciones de tópico
-      const topics = Array.from(new Set(RAW.map(r => r.nombre_topico || r.topico).filter(Boolean))).sort();
-      $topic.innerHTML = '<option value="">Todos los tópicos</option>' + topics.map(t => `<option value="${t}">${t}</option>`).join('');
+      // Poblar opciones de categoría
+      const categories = Array.from(new Set(RAW.map(r => r.categoria).filter(Boolean))).sort();
+      $category.innerHTML = '<option value="">Todas las categorías</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      
+      // Poblar opciones de tópico inicialmente con todos los tópicos
+      updateTopicFilter();
+      
       $pageSize.value = String(state.pageSize);
       update();
     }
@@ -268,6 +302,12 @@
     });
     $q.addEventListener('input', () => { state.pattern = $q.value; });
     $pageSize.addEventListener('change', () => { state.page = 1; update(); });
+    $category.addEventListener('change', () => { 
+      state.page = 1; 
+      state.category = $category.value; 
+      updateTopicFilter();
+      update(); 
+    });
     $topic.addEventListener('change', () => { state.page = 1; state.topic = $topic.value; update(); });
     $searchBtn.addEventListener('click', () => { state.page = 1; state.pattern = $q.value; update(); });
 
