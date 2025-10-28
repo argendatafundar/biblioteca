@@ -15,7 +15,7 @@ NOMBRES_TOPICOS = {
     'CIETEC': 'Ciencia y Tecnología',
     'COMEXT': 'Comercio exterior',
     'CRECIM': 'Crecimiento',
-    'DEMOGR': 'Población',
+    'DEMOGR': 'Demografía',
     'DESHUM': 'Desarrollo humano',
     'DESIGU': 'Desigualdad',
     'ESTPRO': 'Estructura productiva',
@@ -29,6 +29,30 @@ NOMBRES_TOPICOS = {
     'SALING': 'Salarios e ingresos',
     'SEBACO': 'Servicios basados en el conocimiento',
     'TRANEN': 'Transición energética'
+}
+
+
+TOPICO_CATEGORIAS = {
+    'ACECON': 'Macroeconomía',
+    'AGROPE': 'Sectores productivos',
+    'CAMCLI': 'Ambiente',
+    'CIETEC': 'Desarrollo',
+    'COMEXT': 'Desarrollo',
+    'CRECIM': 'Macroeconomía',
+    'DEMOGR': 'Población',
+    'DESHUM': 'Desarrollo',
+    'DESIGU': 'Desarrollo',
+    'ESTPRO': 'Desarrollo',
+    'FISCAL': 'Macroeconomía',
+    'INFDES': 'Trabajo e ingresos',
+    'MERTRA': 'Trabajo e ingresos',
+    'MINERI': 'Sectores productivos',
+    'PESCAS': 'Sectores productivos',
+    'POBREZ': 'Desarrollo',
+    'PRECIO': 'Macroeconomía',
+    'SALING': 'Trabajo e ingresos',
+    'SEBACO': 'Sectores productivos',
+    'TRANEN': 'Ambiente'
 }
 
 def remove_prefix(text, prefix):
@@ -122,6 +146,7 @@ def main():
                 if topico is None:
                     continue
                 r['topico'] = topico
+                r['categoria'] = TOPICO_CATEGORIAS[topico]
                 id_grafico = r["id_grafico"]
                 r['nombre_topico'] = nombre_topico
                 mapping_topico = mappings[topico]
