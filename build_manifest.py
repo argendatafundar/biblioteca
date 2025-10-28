@@ -1,9 +1,8 @@
 from pathlib import Path
 import json
 import requests
-import csv
-import io
 import re
+import pandas as pd
 
 ROOT = Path(__file__).parent.resolve()
 GRAFICOS = ROOT / "graficos"
@@ -12,7 +11,7 @@ MANIFEST = ROOT / "manifest.json"
 NOMBRES_TOPICOS = {
     'ACECON': 'Crecimiento',
     'AGROPE': 'Agroindustria',
-    'CAMCLI': 'Cambio climático y Emisiones de gas a efecto invernadero',
+    'CAMCLI': 'Cambio climático y Emisiones de gas de efecto invernadero',
     'CIETEC': 'Ciencia y Tecnología',
     'COMEXT': 'Comercio exterior',
     'CRECIM': 'Crecimiento',
@@ -37,51 +36,34 @@ def remove_prefix(text, prefix):
         return text[len(prefix):].lstrip()
     return text
 
-def get_content(owner: str, repo: str, path: str) -> dict:
-    """
-    equivalent to:
-    curl -L \
-    -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer <YOUR-TOKEN>" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    https://api.github.com/repos/OWNER/REPO/contents/PATH
-    """
-    
-    url = f"https://raw.githubusercontent.com/{owner}/{repo}/refs/heads/main/{path}"
-
-
-    # print(f"Fetching content from {url}")
-
+def get_mappings_json(topico:str)->dict:
+    topico = topico.upper()
+    url = f"https://argendata.fund.ar/transformers/{topico}/mappings.json"
     response = requests.get(url)
-    if response.status_code == 200:
-        return response
-    else:
-        raise Exception(f"Error: {response.status_code} - {response.text}")
+    response.raise_for_status()  # Asegura que la solicitud fue exitosa
+    mappings = response.json()
+    new_mapping = {}
+    for key, values in mappings.items():
+        for v in values: 
+            value = v['public']
+            new_mapping[value] = key 
+    return new_mapping
+
+def get_mappings_csv(topico:str)->pd.DataFrame:
+    topico = topico.upper()
+    url = f"https://argendata.fund.ar/transformers/{topico}/mappings.csv"
+    df = pd.read_csv(url)
+    mappings  ={f"{topico}_g{str(row['id_grafico']).zfill(2)}": row['nombre_archivo'] for _, row in df.iterrows()}
+    return mappings
 
 
-def get_mapping_json(topico):
-    response = get_content("argendatafundar", "transformers", f"{topico}/mappings.json")
-    data = response.json()
-    result = {}
-    for k,v in data.items():
-        for item in v:
-            result[item['public']] = k
-    return result
-
-def get_mapping_csv(topico):
-    
-    content = get_content("argendatafundar", "transformers", f"{topico}/mappings.csv")
-    csv_content = content.text
-    reader = csv.DictReader(io.StringIO(csv_content))
-    return {f"{topico}_g{str(row['id_grafico']).zfill(2)}": row['nombre_archivo'] for row in reader}
-
-def get_mapping(topico):
+def get_mapping(topico:str)->dict:
     try:
-        return get_mapping_json(topico)
+        return get_mappings_json(topico)
     except Exception as e_json:
         print(f"[get_mapping] Falla JSON para tópico {topico}: {e_json}. Intentando CSV...")
         try:
-            return get_mapping_csv(topico)
+            return get_mappings_csv(topico)
         except Exception as e_csv:
             print(f"[get_mapping] ERROR: no se pudo obtener mapping para tópico {topico}. CSV también falló: {e_csv}")
             raise
@@ -110,6 +92,11 @@ def main():
         print("Directorio 'graficos' no existe. No se generará manifest.")
         return
 
+
+    mappings = {}
+    for topico in NOMBRES_TOPICOS.keys():
+        mappings[topico] = get_mapping(topico)
+
     items = []
     for p in sorted(GRAFICOS.rglob("*.json")):
         if p.name.lower() == "manifest.json":
@@ -137,9 +124,9 @@ def main():
                 r['topico'] = topico
                 id_grafico = r["id_grafico"]
                 r['nombre_topico'] = nombre_topico
-                mapping = get_mapping(topico)
-                r["nombre_archivo"] = mapping[id_grafico]
-                r["link_dataset"] = f"https://raw.githubusercontent.com/argendatafundar/data/refs/heads/main/{topico}/{r['nombre_archivo']}"
+                mapping_topico = mappings[topico]
+                r["nombre_archivo"] = mapping_topico[id_grafico]
+                r["link_dataset"] = f"https://argendata.fund.ar/data/{topico}/{r['nombre_archivo']}"
             if "__source" not in r:
                 r["__source"] = rel
             # Limpieza de prefijos
@@ -150,8 +137,8 @@ def main():
             
             items.append(r)
         
-
-
+    items = [item for item in items if item.get("id_grafico") is not None]
+    items = sorted(items, key=lambda x: x.get("nombre_topico"))
     MANIFEST.write_text(json.dumps({"items": items}, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Escrito {MANIFEST} con {len(items)} registros desde {GRAFICOS}")
 
